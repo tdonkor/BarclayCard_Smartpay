@@ -8,11 +8,12 @@ using System.Xml.Linq;
 
 namespace BarclayCard_Smartpay
 {
+
+
     public class BarclayCardSmartpayApi : IDisposable
     {
 
-        //int amount;
-        private readonly string host = "127.0.0.1";
+        //int amount
         int port = 8000;
 
         // Data buffer for incoming data.
@@ -27,12 +28,10 @@ namespace BarclayCard_Smartpay
         public void SubmitPayment(int amount)
         {
             // Data buffer for incoming data.  
-            byte[] bytes = new byte[1024];
+           // byte[] bytes = new byte[1024];
             Random rnd = new Random();
             int transNum = rnd.Next(1, int.MaxValue);
             string submitResult = string.Empty;
-
-
 
             XDocument payment = XDocument.Parse(
                                    "<RLSOLVE_MSG version=\"5.0\">" + "<MESSAGE>" + "<TRANS_NUM>" + transNum + "</TRANS_NUM>" + "</MESSAGE>" + "<POI_MSG type=\"submittal\">" +
@@ -86,7 +85,7 @@ namespace BarclayCard_Smartpay
                        // Console.WriteLine("Result: " + result[i].InnerXml);
                         if (result[i].InnerXml == "success")
                             submitResult = "success";
-                        Console.WriteLine("Successful payment submitted");
+                        Console.WriteLine("******Successful payment submitted******\n");
                     }
 
                     // Release the socket.  
@@ -95,14 +94,11 @@ namespace BarclayCard_Smartpay
 
                     if (submitResult == "success")
                     {
-                        //Thread.Sleep(15);
-
+                    
                         processTransaction(transNum);
                         PrintReciptResponse(transNum);
                         Finalise(transNum);
                     }
-
-
                 }
                 catch (ArgumentNullException ane)
                 {
@@ -138,63 +134,7 @@ namespace BarclayCard_Smartpay
                               "</POI_MSG>" +
                             "</RLSOLVE_MSG>");
 
-            try
-            {
-                // Establish the remote endpoint for the socket.  
-                // This example uses port 8000 on the local computer.  
-                IPHostEntry ipHostInfo = Dns.GetHostEntry(Dns.GetHostName());
-                IPAddress ipAddress = ipHostInfo.AddressList[0];
-                IPEndPoint remoteEP = new IPEndPoint(ipAddress, port);
-
-                // Create a TCP/IP  socket.  
-                Socket sender = new Socket(ipAddress.AddressFamily,
-                    SocketType.Stream, ProtocolType.Tcp);
-
-                // Connect the socket to the remote endpoint. Catch any errors.  
-                try
-                {
-                    sender.Connect(remoteEP);
-
-                    Console.WriteLine("Socket connected to {0}",
-                        sender.RemoteEndPoint.ToString());
-
-                    // Encode the data string into a byte array.  
-                    byte[] msg = Encoding.ASCII.GetBytes(processTran.ToString());
-
-                    // Send the data through the socket.  
-                    int bytesSent = sender.Send(msg);
-
-                    // Receive the response from the remote device.  
-                    int bytesRec = sender.Receive(bytes);
-                    Console.WriteLine("Process Tran = {0}",
-                        Encoding.ASCII.GetString(bytes, 0, bytesRec));
-
-                    Thread.Sleep(10000);
-
-                    // Release the socket.  
-                    sender.Shutdown(SocketShutdown.Both);
-                    sender.Close();
-                }
-                catch (ArgumentNullException ane)
-                {
-                    Console.WriteLine("ArgumentNullException : {0}", ane.ToString());
-                }
-                catch (SocketException se)
-                {
-                    Console.WriteLine("SocketException : {0}", se.ToString());
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine("Unexpected exception : {0}", e.ToString());
-                }
-
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e.ToString());
-            }
-
-
+            CreateSocket(processTran, "PROCESSTRANSACTION");
 
         }
 
@@ -214,62 +154,10 @@ namespace BarclayCard_Smartpay
                             "</POI_MSG>" +
                           "</RLSOLVE_MSG>");
 
-            try
-            {
-                // Establish the remote endpoint for the socket.  
-                // This example uses port 8000 on the local computer.  
-                IPHostEntry ipHostInfo = Dns.GetHostEntry(Dns.GetHostName());
-                IPAddress ipAddress = ipHostInfo.AddressList[0];
-                IPEndPoint remoteEP = new IPEndPoint(ipAddress, port);
-
-                // Create a TCP/IP  socket.  
-                Socket sender = new Socket(ipAddress.AddressFamily,
-                    SocketType.Stream, ProtocolType.Tcp);
-
-                // Connect the socket to the remote endpoint. Catch any errors.  
-                try
-                {
-                    sender.Connect(remoteEP);
-
-                    Console.WriteLine("\nSocket connected to {0}",
-                        sender.RemoteEndPoint.ToString());
-
-                    // Encode the data string into a byte array.  
-                    byte[] msg = Encoding.ASCII.GetBytes(printReceipt.ToString());
-
-                    // Send the data through the socket.  
-                    int bytesSent = sender.Send(msg);
-
-                    // Receive the response from the remote device.  
-                    int bytesRec = sender.Receive(bytes);
-                    Console.WriteLine("\nReceipt = {0}",
-                        Encoding.ASCII.GetString(bytes, 0, bytesRec));
-
-
-                    // Release the socket.  
-                    sender.Shutdown(SocketShutdown.Both);
-                    sender.Close();
-                }
-                catch (ArgumentNullException ane)
-                {
-                    Console.WriteLine("ArgumentNullException : {0}", ane.ToString());
-                }
-                catch (SocketException se)
-                {
-                    Console.WriteLine("SocketException : {0}", se.ToString());
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine("Unexpected exception : {0}", e.ToString());
-                }
-
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e.ToString());
-            }
+            CreateSocket(printReceipt, "PRINTRECEIPT");
 
         }
+
 
         public void Finalise(int transNum)
         {
@@ -285,6 +173,11 @@ namespace BarclayCard_Smartpay
                             "</POI_MSG>" +
                           "</RLSOLVE_MSG>");
 
+            CreateSocket(finalise, "FINALISE");
+        }
+
+        private void CreateSocket(XDocument operation, string operationStr)
+        {
             try
             {
                 // Establish the remote endpoint for the socket.  
@@ -302,19 +195,25 @@ namespace BarclayCard_Smartpay
                 {
                     sender.Connect(remoteEP);
 
-                    Console.WriteLine("\nSocket connected to {0}",
+                    Console.WriteLine("\nSocket connected to:\n{0}",
                         sender.RemoteEndPoint.ToString());
 
                     // Encode the data string into a byte array.  
-                    byte[] msg = Encoding.ASCII.GetBytes(finalise.ToString());
+                    byte[] msg = Encoding.ASCII.GetBytes(operation.ToString());
 
                     // Send the data through the socket.  
                     int bytesSent = sender.Send(msg);
 
                     // Receive the response from the remote device.  
                     int bytesRec = sender.Receive(bytes);
-                    Console.WriteLine("\nFinalise = {0}",
+                    Console.WriteLine("\n" + operationStr + ":" +
+                        "\n{0}",
                         Encoding.ASCII.GetString(bytes, 0, bytesRec));
+
+                    if (operationStr == "PROCESSTRANSACTION")
+                    {
+                        Thread.Sleep(10000);
+                    }
 
 
                     // Release the socket.  
@@ -339,8 +238,9 @@ namespace BarclayCard_Smartpay
             {
                 Console.WriteLine(e.ToString());
             }
-
         }
+
+       
 
         public void Dispose()
         {
