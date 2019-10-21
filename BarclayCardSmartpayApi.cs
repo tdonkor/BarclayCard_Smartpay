@@ -12,7 +12,7 @@ namespace BarclayCard_Smartpay
     {
 
         //int amount;
-        string host = "127.0.0.1";
+        private readonly string host = "127.0.0.1";
         int port = 8000;
 
         // Data buffer for incoming data.
@@ -23,59 +23,6 @@ namespace BarclayCard_Smartpay
         //  //  this.amount = amount;
        
         //}
-
-
-        //public void SocketListner()
-        //{
-        //    XDocument doc = XDocument.Parse(
-        //               "<RLSOLVE_MSG version=\"5.0\">"+"<MESSAGE>"+"<TRANS_NUM>00001</TRANS_NUM>"+"</MESSAGE>"+"<POI_MSG type=\"submittal\">" +
-        //                "<SUBMIT name=\"submitPayment\">" +
-        //                 "<TRANSACTION type= \"purchase\" action =\"auth\" source =\"icc\" customer=\"present\">"+
-        //                 "<AMOUNT currency=\"826\" country=\"826\">" +
-        //                   "<TOTAL>" + amount + "</TOTAL>" +
-        //                 "</AMOUNT>" +
-        //                 "</TRANSACTION>" +
-        //                "</SUBMIT>" +
-        //               "</POI_MSG>" +
-        //             "</RLSOLVE_MSG>");
-        //    // Connect to a remote device.
-        //    try
-        //    {
-        //        // Look up the address for the specified host.
-        //        IPHostEntry address = Dns.GetHostEntry(host);
-        //        IPEndPoint ipe = new IPEndPoint(address.AddressList[0], port);
-
-        //        // Create Socket.	
-        //        using (Socket sock = new Socket(ipe.AddressFamily, SocketType.Stream, ProtocolType.Tcp))
-        //        {
-        //            sock.Connect(ipe); // Connect to the Socket.
-        //                               // Create Stream.
-        //            using (NetworkStream sockStream = new NetworkStream(sock))
-        //            {
-        //                // Read from the XDocument.
-        //                using (XmlReader reader = doc.CreateReader())
-        //                {
-        //                    // Copy nodes to an XmlWriter which transforms them to bytes that are written to the Stream for the Socket.
-        //                    XmlWriterSettings settings = new XmlWriterSettings();
-        //                    settings.Encoding = new UTF8Encoding(false, true);
-        //                    using (XmlWriter writer = XmlWriter.Create(sockStream, settings))
-        //                    {
-        //                        while (reader.Read()) // While there is another XML node...
-        //                        {
-        //                            writer.WriteNode(reader, false); // Copy that node.
-        //                        }
-        //                    }
-        //                }
-        //            }
-        //        }
-
-        //        }
-        //    catch (Exception ex)
-        //    {
-        //        Console.WriteLine("Error: " + ex);
-        //    }
-            
-        //  }
 
         public void SubmitPayment(int amount)
         {
@@ -109,7 +56,7 @@ namespace BarclayCard_Smartpay
 
                 // Create a TCP/IP  socket.  
                 Socket sender = new Socket(ipAddress.AddressFamily,
-                    SocketType.Stream, ProtocolType.Tcp);
+                SocketType.Stream, ProtocolType.Tcp);
 
                 // Connect the socket to the remote endpoint. Catch any errors.  
                 try
@@ -129,6 +76,7 @@ namespace BarclayCard_Smartpay
                     int bytesRec = sender.Receive(bytes);
                     Console.WriteLine("Payment Submitted = {0}",
                         Encoding.ASCII.GetString(bytes, 0, bytesRec));
+
                     XmlDocument doc = new XmlDocument();
                     doc.LoadXml(Encoding.ASCII.GetString(bytes, 0, bytesRec).ToString());
                     XmlNodeList result = doc.GetElementsByTagName("RESULT");
@@ -141,21 +89,17 @@ namespace BarclayCard_Smartpay
                         Console.WriteLine("Successful payment submitted");
                     }
 
-
-                    //read the response
-
                     // Release the socket.  
                     sender.Shutdown(SocketShutdown.Both);
                     sender.Close();
 
                     if (submitResult == "success")
                     {
-                        Thread.Sleep(10);
+                        //Thread.Sleep(15);
 
                         processTransaction(transNum);
                         PrintReciptResponse(transNum);
-
-
+                        Finalise(transNum);
                     }
 
 
@@ -188,9 +132,9 @@ namespace BarclayCard_Smartpay
                                 "<TRANS_NUM>" +
                                     transNum + 
                                 "</TRANS_NUM>" + 
-                              "</MESSAGE>" +"<TRANS name=\"processTransaction\"></TRANS>" +
+                              "</MESSAGE>" +
                               "<POI_MSG type=\"transactional\">" +
-                                
+                              "<TRANS name=\"processTransaction\"></TRANS>" +
                               "</POI_MSG>" +
                             "</RLSOLVE_MSG>");
 
