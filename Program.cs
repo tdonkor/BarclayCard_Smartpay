@@ -25,9 +25,7 @@ namespace BarclayCard_Smartpay
                 {
                     try
                     {
-                        //payment.SocketListner();
-                        payment.SubmitPayment(amount);
-
+                        payment.TransactionProcess(amount);
                     }
                     catch (Exception ex)
                     {
