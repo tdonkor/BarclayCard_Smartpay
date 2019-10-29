@@ -42,11 +42,12 @@ namespace BarclayCard_Smartpay
             XDocument printMerchantReceipt = null;
             XDocument printCustomerReceipt = null;
 
-            Random rnd = new Random();
-            TransNum = rnd.Next(1, int.MaxValue);
+  
             string submitPaymentResult = string.Empty;
             string FinaliseResult = string.Empty;
 
+            Random rnd = new Random();
+            TransNum = rnd.Next(1, int.MaxValue);
             Console.WriteLine("Transaction Number is ***** " + TransNum +  " *****\n\n");
 
             //************ PROCEDURES ***********
@@ -65,10 +66,13 @@ namespace BarclayCard_Smartpay
             string paymentResponse = sendToSmartPay(paymentsocket, payment, "PAYMENT");
            
             submitPaymentResult = CheckResult(paymentResponse);
-            
+
             if (submitPaymentResult == "success") Console.WriteLine("******Successful payment submitted******\n");
             else
+            {
                 Console.WriteLine("****** Payment failed******\n");
+               // throw new Exception("Payment failed");
+            }
        
             //checkSocket closed
             Console.WriteLine("Paymentsocket Open: " + SocketConnected(paymentsocket));
@@ -93,7 +97,9 @@ namespace BarclayCard_Smartpay
             Console.WriteLine("printMerchantReceipt Socket Open: " + SocketConnected(printMerchantReceiptSocket));
             printMerchantReceipt = PrintReciptResponse(TransNum);
             //send printMerchantReceipt - check response
+
             string printMerchant = sendToSmartPay(printMerchantReceiptSocket, printMerchantReceipt, "PRINTRECEIPT");
+
             Console.WriteLine($"printMerchant Return: {printMerchant}");
             Console.WriteLine("printMerchantReceipt Socket Open: " + SocketConnected(printMerchantReceiptSocket));
 
@@ -107,6 +113,8 @@ namespace BarclayCard_Smartpay
             string printCustomer = sendToSmartPay(printCustomerReceiptSocket, printCustomerReceipt, "PRINTRECEIPTCUSTOMER");
             Console.WriteLine($"printCustomer Return: {printCustomer}");
             Console.WriteLine("printCustomerReceipt Socket Open: " + SocketConnected(printCustomerReceiptSocket));
+
+            // check for 
 
             //FINALISE
             //open Finalisesocket connection
@@ -153,11 +161,11 @@ namespace BarclayCard_Smartpay
                     {
                         bytesRec = sender.Receive(bytes);
                         message = Encoding.ASCII.GetString(bytes, 0, bytesRec);
+                        Console.WriteLine($"PROCESSTRANSACTION and PRINTRECEIPT is {Encoding.ASCII.GetString(bytes, 0, bytesRec)}");
                         if (message.Contains("posPrintReceipt")) return message;
 
                     } while (message.Contains("posDisplayMessage"));
 
-                  
                 }
                 if ((operationStr == "PAYMENT") || (operationStr == "FINALISE"))
                 {
@@ -167,26 +175,34 @@ namespace BarclayCard_Smartpay
                         bytesRec = sender.Receive(bytes);
                         if (bytesRec != 0)
                         {
-                            Console.WriteLine($"Response is {Encoding.ASCII.GetString(bytes, 0, bytesRec)}");
+                            Console.WriteLine($"PAYMENT and FINALISE is {Encoding.ASCII.GetString(bytes, 0, bytesRec)}");
                             return Encoding.ASCII.GetString(bytes, 0, bytesRec);
                         }
 
-                    } while (bytesRec == 0);
+                    } while (bytesRec != 0);
                 }
-
+                //TODO check for card 
                 if (operationStr == "PRINTRECEIPTCUSTOMER")
                 {
+                   
                     do
                     {
                         bytesRec = sender.Receive(bytes);
                         message = Encoding.ASCII.GetString(bytes, 0, bytesRec);
-                        if (message.Contains("processTransactionResponse")) return message;
+                       // Console.WriteLine($"PRINTRECEIPTCUSTOMER is {Encoding.ASCII.GetString(bytes, 0, bytesRec)}");
+                     
 
-                    } while (bytesRec == 0);
+                        if (message.Contains("processTransactionResponse"))
+                        {
+                            Console.WriteLine("************ Processs transaction Called *************");
+                            return message;
+                        }
+                            
+
+                    } while (message != string.Empty);
 
 
                 }
-
 
             }
             catch (ArgumentNullException ane)
@@ -214,28 +230,6 @@ namespace BarclayCard_Smartpay
 
             for (int i = 0; i < nodeResult.Count; i++)
             {
-                //Console.WriteLine("Result: " + nodeResult[i].InnerXml);
-                if (nodeResult[i].InnerXml == "success")
-                    result = "success";
-                else
-                    result = "failure";
-            }
-
-            return result;
-        }
-
-
-
-        private string PosPrintReceiptResult(string submitResult)
-        {
-            string result = string.Empty;
-            XmlDocument doc = new XmlDocument();
-            doc.LoadXml(submitResult);
-            XmlNodeList nodeResult = doc.GetElementsByTagName("RECEIPT type=\"merchant\" format=\"plain\"");
-
-            for (int i = 0; i < nodeResult.Count; i++)
-            {
-                //Console.WriteLine("Result: " + nodeResult[i].InnerXml);
                 if (nodeResult[i].InnerXml == "success")
                     result = "success";
                 else
@@ -251,7 +245,7 @@ namespace BarclayCard_Smartpay
             XDocument payment = XDocument.Parse(
                                   "<RLSOLVE_MSG version=\"5.0\">" +
                                   "<MESSAGE>" +
-                                  //"<SOURCE_ID>K0001</SOURCE_ID>" +
+                                  "<SOURCE_ID>DK01ACRELEC</SOURCE_ID>" +
                                   "<TRANS_NUM>" + TransNum +
                                   "</TRANS_NUM>" +
                                   "</MESSAGE>" +
@@ -283,7 +277,6 @@ namespace BarclayCard_Smartpay
                               "</POI_MSG>" +
                             "</RLSOLVE_MSG>");
 
-            // ProcessMessage(processTran, "PROCESSTRANSACTION");
             return processTran;
 
         }
@@ -305,7 +298,6 @@ namespace BarclayCard_Smartpay
                             "</POI_MSG>" +
                           "</RLSOLVE_MSG>");
 
-           // ProcessMessage(printMerchantReceipt, "PRINTRECEIPT");
             return printReceipt;
         }
 
@@ -324,36 +316,10 @@ namespace BarclayCard_Smartpay
                             "</POI_MSG>" +
                           "</RLSOLVE_MSG>");
 
-            // ProcessMessage(finalise, "FINALISE");
 
             return finalise;
         }
 
-
-        //new
-        private void CheckMessage(XDocument operation, string operationStr)
-        {
-
-        }
-
-
-        private string PaymentResult(string submitResult, int bytesRec)
-        {
-            XmlDocument doc = new XmlDocument();
-            doc.LoadXml(Encoding.ASCII.GetString(bytes, 0, bytesRec).ToString());
-            XmlNodeList result = doc.GetElementsByTagName("RESULT");
-
-            for (int i = 0; i < result.Count; i++)
-            {
-                // Console.WriteLine("Result: " + result[i].InnerXml);
-                if (result[i].InnerXml == "success")
-                    submitResult = "success";
-
-                Console.WriteLine("******Successful payment submitted******\n");
-            }
-
-            return submitResult;
-        }
         //new 
         private Socket CreateSocket()
         {
@@ -366,118 +332,7 @@ namespace BarclayCard_Smartpay
 
        
 
-        private void ProcessMessage(XDocument operation, string operationStr)
-        {
-            try
-            {
-                // Establish the remote endpoint for the socket.  
-                // This example uses port 8000 on the local computer.  
-                //IPHostEntry ipHostInfo = Dns.GetHostEntry(Dns.GetHostName());
-                //IPAddress ipAddress = ipHostInfo.AddressList[0];
-                //IPEndPoint remoteEP = new IPEndPoint(ipAddress, port);
-
-
-                string submitResult = string.Empty;
-                string tranResp = string.Empty;
-
-                // Create a TCP/IP  socket.  
-                Socket sender = new Socket(ipAddress.AddressFamily,
-                    SocketType.Stream, ProtocolType.Tcp);
-
-                // Connect the socket to the remote endpoint. Catch any errors.  
-                try
-                {
-                    sender.Connect(remoteEP);
-                   // Console.WriteLine("Connection is active 1: " + SocketConnected(sender));
-
-                    Console.WriteLine("\nSocket connected to:\n{0}\n",
-                        sender.RemoteEndPoint.ToString());
-
-                    // Encode the data string into a byte array.  
-                    byte[] msg = Encoding.ASCII.GetBytes(operation.ToString());
-
-                    // Send the data through the socket.  
-                    int bytesSent = sender.Send(msg);
-                 
-                    // Receive the response from the remote device.  
-                    int bytesRec = sender.Receive(bytes);
-
-
-                    Console.WriteLine("\n" + operationStr + " :" +
-                        "\n{0}",
-                        Encoding.ASCII.GetString(bytes, 0, bytesRec));
-
-                    if (operationStr == "PAYMENT")
-                    {
-                        submitResult = PaymentResult(submitResult, bytesRec);
-                    }
-                    string outputResponse = string.Empty;
-                    
-
-                    //need to process until TransactionResponse is available so need to 
-                    // check the bytes returned until the TransactionResponse is recieved
-                    //and check for a merchant and customer receipt, if one is required send the transactiion
-                    // for this
-                    if (operationStr == "PROCESSTRANSACTION")
-                    {
-                        do
-                        {
-                            //check each response in turn
-                            //Console.WriteLine($" Count:{count++} is socket connected: {SocketConnected(sender)}");
-
-                            outputResponse = Encoding.ASCII.GetString(bytes, 0, bytesRec);
-                            //Thread.Sleep(1000);
-
-                            //recieve each response 
-                            bytesRec = sender.Receive(bytes);
-
-                            if (outputResponse.Contains("posPrintReceipt"))
-                            {
-                                Console.WriteLine("Printing Receipt:\n " + outputResponse + "\n");
-                                PrintReciptResponse(TransNum);
-                                Console.WriteLine("Printing Receipt2:\n " + outputResponse + "\n");
-                                PrintReciptResponse(TransNum);
-                                //Thread.Sleep(1000);
-                            }
-
-                        } while (outputResponse != string.Empty);
-
-
-                        Console.WriteLine("Finalise:\n " + outputResponse + "\n");
-                        Finalise(TransNum);
-                    }
-
-
-
-                    // Release the socket.  
-                    sender.Shutdown(SocketShutdown.Both);
-                    sender.Close();
-
-                    if (submitResult == "success")
-                    {
-                       processTransaction(TransNum);
-                    }
-                   
-                }
-                catch (ArgumentNullException ane)
-                {
-                    Console.WriteLine("ArgumentNullException : {0}", ane.ToString());
-                }
-                catch (SocketException se)
-                {
-                    Console.WriteLine("SocketException : {0}", se.ToString());
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine("Unexpected exception : {0}", e.ToString());
-                }
-
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e.ToString());
-            }
-        }
+        
 
         bool SocketConnected(Socket s)
         {
