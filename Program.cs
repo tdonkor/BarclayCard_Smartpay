@@ -13,7 +13,7 @@ namespace BarclayCard_Smartpay
             {
                 Console.Clear();
 
-                Console.WriteLine("\n\tPaymentSense Payment Simulator");
+                Console.WriteLine("\n\tBarclaycard Smartpay Payment Simulator");
                 Console.WriteLine("\t_______________________________\n");
                 int amount = 0;
 

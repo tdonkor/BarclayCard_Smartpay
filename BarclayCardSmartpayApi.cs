@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -19,6 +20,10 @@ namespace BarclayCard_Smartpay
         IPAddress ipAddress;
         IPEndPoint remoteEP;
 
+        string custPath = @"C:\Customer Payment Drivers\PaymentTestCodewithout ATP\BarclayCard_Smartpay_Connect\";
+        string merchantPath = @"C:\Customer Payment Drivers\PaymentTestCodewithout ATP\BarclayCard_Smartpay_Connect\";
+
+
         // Data buffer for incoming data.
         byte[] bytes = new byte[1024];
 
@@ -37,101 +42,123 @@ namespace BarclayCard_Smartpay
         public void TransactionProcess(int amount)
         {
 
-            XDocument payment = null;
-            XDocument procTran = null;
-            XDocument printMerchantReceipt = null;
-            XDocument printCustomerReceipt = null;
+            XDocument paymentXml = null;
+            XDocument procTranXML = null;
+            XDocument firstInteractionXML = null;
+            XDocument secondInteractionXML = null;
+            XDocument FinaliseXml = null;
 
   
+            //check for a success or failure string 
             string submitPaymentResult = string.Empty;
             string FinaliseResult = string.Empty;
 
             Random rnd = new Random();
             TransNum = rnd.Next(1, int.MaxValue);
+
             Console.WriteLine("Transaction Number is ***** " + TransNum +  " *****\n\n");
 
             //************ PROCEDURES ***********
-            //
-            //SUBMITTAL
+         
+//SUBMITTAL
+            paymentXml = Payment(amount);
 
-            payment = Payment(amount);
-
-            // open payment socket connection
+            // open paymentXml socket connection
             Socket paymentsocket = CreateSocket();
 
             //check socket open
             Console.WriteLine("Paymentsocket Open: " + SocketConnected(paymentsocket));
 
             //send submitpayment to smartpay - check response
-            string paymentResponse = sendToSmartPay(paymentsocket, payment, "PAYMENT");
+            string paymentResponse = sendToSmartPay(paymentsocket, paymentXml, "PAYMENT");
            
             submitPaymentResult = CheckResult(paymentResponse);
 
-            if (submitPaymentResult == "success") Console.WriteLine("******Successful payment submitted******\n");
+            if (submitPaymentResult == "success") Console.WriteLine("******Successful paymentXml submitted******\n");
             else
             {
                 Console.WriteLine("****** Payment failed******\n");
-               // throw new Exception("Payment failed");
             }
        
             //checkSocket closed
             Console.WriteLine("Paymentsocket Open: " + SocketConnected(paymentsocket));
 
           
-            // TRANSACTIONAL
+// TRANSACTIONAL
             // open processTransactionsocket connection
             Socket processSocket = CreateSocket();
             //check socket open
             Console.WriteLine("ProcessTransaction Socket Open: " + SocketConnected(processSocket));
-            procTran = processTransaction(TransNum);
+            procTranXML = processTransaction(TransNum);
             //send processTransaction - check response
-            string processTran = sendToSmartPay(processSocket, procTran, "PROCESSTRANSACTION");
+            string processTran = sendToSmartPay(processSocket, procTranXML, "PROCESSTRANSACTION");
             Console.WriteLine($"ProcessTran Return: {processTran}");
+
+            //strip the result from the reciept
+            string merchantResultStr = ExtractXMLReceiptDetails(processTran);
+
+            // This text is added only once to the file.
+            if (!File.Exists(merchantPath))
+            {
+                // Create a file to write to.
+                string createText = "Hello and Welcome Merchant:" + Environment.NewLine;
+                File.WriteAllText(merchantPath + "MerchantReceipt.txt", merchantResultStr);
+            }
             //checkSocket closed
             Console.WriteLine("ProcessTransaction Open: " + SocketConnected(paymentsocket));
 
-            //INTERACTION
-            // open printMerchantReceiptSocket connection
-            Socket printMerchantReceiptSocket = CreateSocket();
+//INTERACTION
+            // open firstInteractionSocket connection
+            Socket firstInteractionSocket = CreateSocket();
             //check socket open
-            Console.WriteLine("printMerchantReceipt Socket Open: " + SocketConnected(printMerchantReceiptSocket));
-            printMerchantReceipt = PrintReciptResponse(TransNum);
-            //send printMerchantReceipt - check response
+            Console.WriteLine("firstInteractionXML Socket Open: " + SocketConnected(firstInteractionSocket));
+            firstInteractionXML = PrintReciptResponse(TransNum);
 
-            string printMerchant = sendToSmartPay(printMerchantReceiptSocket, printMerchantReceipt, "PRINTRECEIPT");
 
-            Console.WriteLine($"printMerchant Return: {printMerchant}");
-            Console.WriteLine("printMerchantReceipt Socket Open: " + SocketConnected(printMerchantReceiptSocket));
+            string firstInteractionStr = sendToSmartPay(firstInteractionSocket, firstInteractionXML, "PROCESSTRANRESPONSE");
 
-            //INTERACTION
+            //strip the result from the reciept
+            string customerResultStr = ExtractXMLReceiptDetails(firstInteractionStr);
+
+            if (!File.Exists(custPath))
+            {
+                // Create a file to write to.
+                string createText = "Hello and Welcome Customer:" + Environment.NewLine;
+                File.WriteAllText(custPath + "CustomerReceipt.txt", customerResultStr);
+            }
+            Console.WriteLine($"firstInteractionStr Return: {firstInteractionStr}");
+            Console.WriteLine("firstInteractionXML Socket Open: " + SocketConnected(firstInteractionSocket));
+
+//INTERACTION
             //open Customer Receipt connection
-            Socket printCustomerReceiptSocket = CreateSocket();
+            Socket secondInteractionSocket = CreateSocket();
             //check socket open
-            Console.WriteLine("printCustomerReceipt Socket Open: " + SocketConnected(printCustomerReceiptSocket));
-            printCustomerReceipt = PrintReciptResponse(TransNum);
-            //send printCustomerReceipt - check response
-            string printCustomer = sendToSmartPay(printCustomerReceiptSocket, printCustomerReceipt, "PRINTRECEIPTCUSTOMER");
-            Console.WriteLine($"printCustomer Return: {printCustomer}");
-            Console.WriteLine("printCustomerReceipt Socket Open: " + SocketConnected(printCustomerReceiptSocket));
+            Console.WriteLine("FinaliseXml Socket Open: " + SocketConnected(secondInteractionSocket));
+            secondInteractionXML = PrintReciptResponse(TransNum);
+            //send FinaliseXml - check response
+            string secondInteractionStr = sendToSmartPay(secondInteractionSocket, secondInteractionXML, "PRINTRECEIPTCUSTOMER");
+            Console.WriteLine($"secondInteractionStr Return: {secondInteractionStr}");
+            Console.WriteLine("secondInteractionXML Socket Open: " + SocketConnected(secondInteractionSocket));
 
-            // check for 
+            
 
-            //FINALISE
+//FINALISE
             //open Finalisesocket connection
             Socket finaliseSocket = CreateSocket();
             //check socket open
             Console.WriteLine("Finalise Socket Open: " + SocketConnected(finaliseSocket));
-            printCustomerReceipt = Finalise(TransNum);
+            FinaliseXml = Finalise(TransNum);
             //check response
-            string finaliseStr = sendToSmartPay(finaliseSocket, printCustomerReceipt, "FINALISE");
+            string finaliseStr = sendToSmartPay(finaliseSocket, FinaliseXml, "FINALISE");
             FinaliseResult = CheckResult(finaliseStr);
 
             if (FinaliseResult == "success") Console.WriteLine("******Transaction Finalised successfully******\n");
             else
                 Console.WriteLine("****** Transaction not Finalised ******\n");
             Console.WriteLine("Finalise Socket Open: " + SocketConnected(finaliseSocket));
-
         }
+
+
 
         //new
         private string sendToSmartPay(Socket sender, XDocument operation, string operationStr)
@@ -155,13 +182,13 @@ namespace BarclayCard_Smartpay
                 int bytesSent = sender.Send(msg);
 
 
-                if ((operationStr == "PROCESSTRANSACTION") || (operationStr == "PRINTRECEIPT"))
+                if ((operationStr == "PROCESSTRANSACTION") || (operationStr == "PROCESSTRANRESPONSE"))
                 {
                     do
                     {
                         bytesRec = sender.Receive(bytes);
                         message = Encoding.ASCII.GetString(bytes, 0, bytesRec);
-                        Console.WriteLine($"PROCESSTRANSACTION and PRINTRECEIPT is {Encoding.ASCII.GetString(bytes, 0, bytesRec)}");
+                        Console.WriteLine($"PROCESSTRANSACTION and PROCESSTRANRESPONSE is {Encoding.ASCII.GetString(bytes, 0, bytesRec)}");
                         if (message.Contains("posPrintReceipt")) return message;
 
                     } while (message.Contains("posDisplayMessage"));
@@ -331,7 +358,17 @@ namespace BarclayCard_Smartpay
         }
 
        
+        string ExtractXMLReceiptDetails(string receiptStr)
+        {
+            string returnedStr = string.Empty;
 
+            var receiptDoc = new XmlDocument();
+            receiptDoc.LoadXml(receiptStr);
+
+            returnedStr = receiptDoc.GetElementsByTagName("RECEIPT")[0].InnerText;
+
+            return returnedStr;
+        }
         
 
         bool SocketConnected(Socket s)
