@@ -16,6 +16,7 @@ namespace BarclayCard_Smartpay
 
         static int number = 0;
         string transNum = "000000";
+        int transRef = 0;
 
         int port = 8000;
         IPHostEntry ipHostInfo;
@@ -24,6 +25,8 @@ namespace BarclayCard_Smartpay
 
         string custPath = @"C:\Customer Payment Drivers\PaymentTestCodewithout ATP\BarclayCard_Smartpay_Connect\";
         string merchantPath = @"C:\Customer Payment Drivers\PaymentTestCodewithout ATP\BarclayCard_Smartpay_Connect\";
+
+        bool receiptSuccess;
 
 
         // Data buffer for incoming data.
@@ -39,21 +42,29 @@ namespace BarclayCard_Smartpay
         }
 
         public void TransactionProcess(int amount)
-        
-{
+        {
 
             XDocument paymentXml = null;
             XDocument procTranXML = null;
             XDocument merchantSuccessXML = null;
             XDocument customerSuccessXML = null;
-            XDocument FinaliseXml = null;
+            XDocument finaliseXml = null;
+            XDocument cancelXml = null;
+            XDocument paymentSettlementXml = null;
+            XDocument procSettleTranXML = null;
+
 
             int intAmount;
+            receiptSuccess = true;
+
+            Random rnd = new Random();
+            transRef = rnd.Next(1, int.MaxValue);
 
 
             //check for a success or failure string 
             string submitPaymentResult = string.Empty;
             string FinaliseResult = string.Empty;
+            string submitSettlePaymentResult = string.Empty;
 
             number++;
             transNum = number.ToString().PadLeft(6, '0');
@@ -83,7 +94,8 @@ namespace BarclayCard_Smartpay
 
             //send submitpayment to smartpay - check response
             string paymentResponseStr = sendToSmartPay(paymentsocket, paymentXml, "PAYMENT");
-           
+            Console.WriteLine($"paymentResponse Return: {paymentResponseStr}");
+
             submitPaymentResult = CheckResult(paymentResponseStr);
 
             if (submitPaymentResult == "success")
@@ -118,6 +130,7 @@ namespace BarclayCard_Smartpay
             if (merchantResultStr == string.Empty)
             {
                 Console.WriteLine("No Merchant receipt returned");
+                receiptSuccess = false;
             }
             else
             {
@@ -125,11 +138,20 @@ namespace BarclayCard_Smartpay
                 if (merchantResultStr.Contains("DECLINED"))
                 {
                     Console.WriteLine("Merchant Receipt has Declined Transaction.");
-            
+                    receiptSuccess = false;
                 }
             }
 
             //TODO if receipt is not successful cancel the transaction or send the successful response
+
+            //if(receiptSuccess == false)
+            //{
+            //    //cancel the transaction
+            //    Socket cancelSocket = CreateSocket();
+            //    Console.WriteLine("CancelTransaction Socket Open: " + SocketConnected(cancelSocket));
+            //    cancelXml = CancelTransaction(transNum);
+
+            //}
 
 
             //This text is added only once to the file.
@@ -152,6 +174,7 @@ namespace BarclayCard_Smartpay
 
 
             string customerResultStr = sendToSmartPay(merchantSuccessSocket, merchantSuccessXML, "MERCHANTTRECEIPT");
+            Console.WriteLine($"customerResult Return: {customerResultStr}");
 
             //strip the result from the returned Customer receipt
             string customerReceipt = ExtractXMLReceiptDetails(customerResultStr);
@@ -187,8 +210,8 @@ namespace BarclayCard_Smartpay
             customerSuccessXML = PrintReciptResponse(transNum);
          
             string customerReceiptStr = sendToSmartPay(customerSuccessSocket, customerSuccessXML, "CUSTOMERRECEIPT");
-           
-            Console.WriteLine($"customerReceiptStr Return: {customerReceiptStr}");
+            Console.WriteLine($"customerReceipt Return: {customerReceiptStr}");
+
             Console.WriteLine("customerSuccessXML Socket Open: " + SocketConnected(customerSuccessSocket));
 
             
@@ -198,9 +221,12 @@ namespace BarclayCard_Smartpay
             Socket finaliseSocket = CreateSocket();
             //check socket open
             Console.WriteLine("Finalise Socket Open: " + SocketConnected(finaliseSocket));
-            FinaliseXml = Finalise(transNum);
+            finaliseXml = Finalise(transNum);
             //check response
-            string finaliseStr = sendToSmartPay(finaliseSocket, FinaliseXml, "FINALISE");
+            string finaliseStr = sendToSmartPay(finaliseSocket, finaliseXml, "FINALISE");
+            Console.WriteLine($"finalise Return: {finaliseStr}");
+
+
             FinaliseResult = CheckResult(finaliseStr);
 
             if (FinaliseResult == "success")
@@ -213,6 +239,37 @@ namespace BarclayCard_Smartpay
             }
 
             Console.WriteLine("Finalise Socket Open: " + SocketConnected(finaliseSocket));
+
+// run the settlement by reference  SUBMITTAL-- submit payment ----
+
+           paymentSettlementXml = Payment(amount, transNum);
+
+            // open paymentXml socket connection
+            Socket paymenSettlementSocket = CreateSocket();
+
+            //check socket open
+            Console.WriteLine("Paymentsocket Open: " + SocketConnected(paymentsocket));
+
+            //send submitpayment to smartpay - check response
+            string paymentSettleResponseStr = sendToSmartPay(paymenSettlementSocket, paymentSettlementXml, "PAYMENT");
+            Console.WriteLine($"payment SettleResponse Return: {paymentSettleResponseStr}");
+
+            submitSettlePaymentResult = CheckResult(paymentSettleResponseStr);
+
+            if (submitSettlePaymentResult == "success")
+            {
+                Console.WriteLine("******Successful Settlement Payment submitted******\n");
+            }
+            else
+            {
+                Console.WriteLine("****** Settlement Payment failed******\n");
+            }
+
+            //checkSocket closed
+            Console.WriteLine("paymenSettlementSocket Open: " + SocketConnected(paymenSettlementSocket));
+
+//Procees the settlement transaction
+
         }
 
 
@@ -259,13 +316,13 @@ namespace BarclayCard_Smartpay
                         bytesRec = sender.Receive(bytes);
                         if (bytesRec != 0)
                         {
-                            Console.WriteLine($"{operationStr} is {Encoding.ASCII.GetString(bytes, 0, bytesRec)}");
+                          //  Console.WriteLine($"{operationStr} is {Encoding.ASCII.GetString(bytes, 0, bytesRec)}");
                             return Encoding.ASCII.GetString(bytes, 0, bytesRec);
                         }
 
                     } while (bytesRec != 0);
                 }
-                //TODO check for card 
+            
                 if (operationStr == "CUSTOMERRECEIPT")
                 {
                    
@@ -273,7 +330,7 @@ namespace BarclayCard_Smartpay
                     {
                         bytesRec = sender.Receive(bytes);
                         message = Encoding.ASCII.GetString(bytes, 0, bytesRec);
-                        // Console.WriteLine($"{operationStr} is {Encoding.ASCII.GetString(bytes, 0, bytesRec)}");
+                      //  Console.WriteLine($"{operationStr} is {Encoding.ASCII.GetString(bytes, 0, bytesRec)}");
 
 
                         if (message.Contains("processTransactionResponse"))
@@ -281,10 +338,8 @@ namespace BarclayCard_Smartpay
                             Console.WriteLine("************ Processs transaction response  received *************");
                             return message;
                         }
-                            
 
                     } while (message != string.Empty);
-
 
                 }
 
@@ -336,6 +391,29 @@ namespace BarclayCard_Smartpay
                                   "<POI_MSG type=\"submittal\">" +
                                    "<SUBMIT name=\"submitPayment\">" +
                                     "<TRANSACTION type= \"purchase\" action =\"auth\" source =\"icc\" customer=\"present\">" +
+                                    "<AMOUNT currency=\"826\" country=\"826\">" +
+                                      "<TOTAL>" + amount + "</TOTAL>" +
+                                    "</AMOUNT>" +
+                                    "</TRANSACTION>" +
+                                   "</SUBMIT>" +
+                                  "</POI_MSG>" +
+                                "</RLSOLVE_MSG>");
+
+            return payment;
+        }
+
+        public XDocument PaymentSettle(int amount, string transNum)
+        {
+            XDocument payment = XDocument.Parse(
+                                  "<RLSOLVE_MSG version=\"5.0\">" +
+                                  "<MESSAGE>" +
+                                  "<TRANS_NUM>" + transNum +
+                                  "</TRANS_NUM>" +
+                                  "</MESSAGE>" +
+                                  "<POI_MSG type=\"submittal\">" +
+                                   "<SUBMIT name=\"submitPayment\">" +
+                                    "<TRANSACTION type= \"purchase\" action =\"settle_transref\" source =\"icc\" customer=\"present\" reference= "
+                                    + "\"" + transRef + "\"" + "> " +
                                     "<AMOUNT currency=\"826\" country=\"826\">" +
                                       "<TOTAL>" + amount + "</TOTAL>" +
                                     "</AMOUNT>" +
@@ -404,7 +482,25 @@ namespace BarclayCard_Smartpay
             return finalise;
         }
 
-        //new 
+        public XDocument CancelTransaction(string transNum)
+        {
+            XDocument cancel = XDocument.Parse(
+                            "<RLSOLVE_MSG version=\"5.0\">" +
+                            "<MESSAGE>" +
+                              "<TRANS_NUM>" +
+                                  transNum +
+                                  "<SOURCE_ID>DK01.P001</SOURCE_ID>" +
+                              "</TRANS_NUM>" +
+                            "</MESSAGE>" +
+                            "<POI_MSG type=\"administrative\">" +
+                             "<TRANSACTION reference=\"cancelTransaction\"></TRANSACTION>" +
+                            "</POI_MSG>" +
+                          "</RLSOLVE_MSG>");
+
+
+            return cancel;
+        }
+
         private Socket CreateSocket()
         {
             // Create a TCP/IP  socket.  
