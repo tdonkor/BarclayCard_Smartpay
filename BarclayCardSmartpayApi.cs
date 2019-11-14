@@ -16,12 +16,14 @@ namespace BarclayCard_Smartpay
 
         static int number = 0;
         string transNum = "000000";
-        string transactionLimit = "9999998";
+        string transactionLimit = "999999";
         string toBeSearched = "reference=";
         string reference = string.Empty;
 
+        string description = string.Empty;
 
-        int transRef = 0;
+
+      //  int transRef = 0;
 
         int port = 8000;
         IPHostEntry ipHostInfo;
@@ -64,7 +66,7 @@ namespace BarclayCard_Smartpay
             receiptSuccess = true;
 
             Random rnd = new Random();
-            transRef = rnd.Next(1, int.MaxValue);
+            description = rnd.Next(1, int.MaxValue).ToString();
 
 
             //check for a success or failure string 
@@ -73,8 +75,16 @@ namespace BarclayCard_Smartpay
             string finaliseSettleResult = string.Empty;
             string submitSettlePaymentResult = string.Empty;
 
-            number++;
+            number++;         
             transNum = number.ToString().PadLeft(6, '0');
+
+            //check for transNum max value
+            if (transNum == transactionLimit)
+            {
+                //reset
+                number = 1;
+                transNum = number.ToString().PadLeft(6, '0');
+            }
 
             //check amount is valid
             intAmount = Utils.GetNumericAmountValue(amount);
@@ -91,7 +101,7 @@ namespace BarclayCard_Smartpay
          
 //SUBMITTAL  -- submit payment ----
 
-            paymentXml = Payment(amount, transNum);
+            paymentXml = Payment(amount, transNum, description);
 
             // open paymentXml socket connection
             Socket paymentsocket = CreateSocket();
@@ -125,8 +135,8 @@ namespace BarclayCard_Smartpay
             Console.WriteLine("ProcessTransaction Socket Open: " + SocketConnected(processSocket));
 
             procTranXML = processTransaction(transNum);
-            //send processTransaction - check response
 
+            //send processTransaction - check response
             string processTranResponseStr = sendToSmartPay(processSocket, procTranXML, "PROCESSTRANSACTION");
             Console.WriteLine($"ProcessTran Return: {processTranResponseStr}");
 
@@ -250,85 +260,92 @@ namespace BarclayCard_Smartpay
             if (finaliseResult == "success")
             {
                 Console.WriteLine("******Transaction Finalised successfully******\n");
+               
             }
             else
             {
                 Console.WriteLine("****** Transaction not Finalised ******\n");
+                receiptSuccess = false;
             }
 
-            Console.WriteLine("Finalise Socket Open: " + SocketConnected(finaliseSocket));
+            Console.WriteLine($"Transation = {receiptSuccess}\n if true do Settlement if not end the transaction\n");
 
-            // run the settlement by reference  SUBMITTAL-- submit payment ----
-
-
-            Console.WriteLine("\n******Doing  Settlement Payment ******\n");
-
-            paymentSettlementXml = PaymentSettle(amount, transNum, reference);
-
-            // open paymentXml socket connection
-            Socket paymenSettlementSocket = CreateSocket();
-
-            //check socket open
-            Console.WriteLine("Paymentsocket Open: " + SocketConnected(paymenSettlementSocket));
-
-            //send submitpayment to smartpay - check response
-            string paymentSettleResponseStr = sendToSmartPay(paymenSettlementSocket, paymentSettlementXml, "PAYMENT");
-            Console.WriteLine($"payment SettleResponse Return: {paymentSettleResponseStr}");
-
-             submitSettlePaymentResult = CheckResult(paymentSettleResponseStr);
-
-            if (submitSettlePaymentResult == "success")
+            if (receiptSuccess == true)
             {
-                Console.WriteLine("******Successful Settlement Payment submitted******\n");
+
+                Console.WriteLine("Finalise Socket Open: " + SocketConnected(finaliseSocket));
+
+                // run the settlement by reference  SUBMITTAL-- submit payment ----
+
+
+                Console.WriteLine("\n******Doing  Settlement Payment ******\n");
+
+                paymentSettlementXml = PaymentSettle(amount, transNum, reference, description);
+
+                // open paymentXml socket connection
+                Socket paymenSettlementSocket = CreateSocket();
+
+                //check socket open
+                Console.WriteLine("Paymentsocket Open: " + SocketConnected(paymenSettlementSocket));
+
+                //send submitpayment to smartpay - check response
+                string paymentSettleResponseStr = sendToSmartPay(paymenSettlementSocket, paymentSettlementXml, "PAYMENT");
+                Console.WriteLine($"payment SettleResponse Return: {paymentSettleResponseStr}");
+
+                submitSettlePaymentResult = CheckResult(paymentSettleResponseStr);
+
+                if (submitSettlePaymentResult == "success")
+                {
+                    Console.WriteLine("******Successful Settlement Payment submitted******\n");
+                }
+                else
+                {
+                    Console.WriteLine("****** Settlement Payment failed******\n");
+                }
+
+
+                Console.WriteLine("paymenSettlementSocket Open: " + SocketConnected(paymenSettlementSocket));
+
+                //Procees the settlement transaction
+
+
+                Socket processSettleSocket = CreateSocket();
+
+                Console.WriteLine("processSettleSocket Socket Open: " + SocketConnected(processSettleSocket));
+
+                procSettleTranXML = processTransaction(transNum);
+                //send processTransaction - check response
+
+                string processSettleTranResponseStr = sendToSmartPay(processSettleSocket, procSettleTranXML, "PROCESSSETTLETRANSACTION");
+                Console.WriteLine($"ProcessTran Return: {processSettleTranResponseStr}");
+
+                Console.WriteLine("processSettleSocket Socket Open: " + SocketConnected(processSettleSocket));
+
+                //FINALISE settle
+
+                Socket finaliseSettSocket = CreateSocket();
+
+                Console.WriteLine("Finalise Socket Open: " + SocketConnected(finaliseSettSocket));
+                finaliseSettleXml = Finalise(transNum);
+
+                //check response
+                string finaliseSettleStr = sendToSmartPay(finaliseSettSocket, finaliseSettleXml, "FINALISE");
+                Console.WriteLine($"finalise Return: {finaliseSettleStr}");
+
+
+                finaliseSettleResult = CheckResult(finaliseSettleStr);
+
+                if (finaliseSettleResult == "success")
+                {
+                    Console.WriteLine("******Transaction Settle  Finalised successfully******\n");
+                }
+                else
+                {
+                    Console.WriteLine("****** Transaction Settle not Finalised ******\n");
+                }
+
+                Console.WriteLine("Finalise Socket Open: " + SocketConnected(finaliseSettSocket));
             }
-            else
-            {
-                Console.WriteLine("****** Settlement Payment failed******\n");
-            }
-
-       
-            Console.WriteLine("paymenSettlementSocket Open: " + SocketConnected(paymenSettlementSocket));
-
-            //Procees the settlement transaction
-
-
-            Socket processSettleSocket = CreateSocket();
-
-            Console.WriteLine("processSettleSocket Socket Open: " + SocketConnected(processSettleSocket));
-
-            procSettleTranXML = processTransaction(transNum);
-            //send processTransaction - check response
-
-            string processSettleTranResponseStr = sendToSmartPay(processSettleSocket, procSettleTranXML, "PROCESSSETTLETRANSACTION");
-            Console.WriteLine($"ProcessTran Return: {processSettleTranResponseStr}");
-
-            Console.WriteLine("processSettleSocket Socket Open: " + SocketConnected(processSettleSocket));
-
-    //FINALISE settle
-           
-            Socket finaliseSettSocket = CreateSocket();
-          
-            Console.WriteLine("Finalise Socket Open: " + SocketConnected(finaliseSettSocket));
-            finaliseSettleXml = Finalise(transNum);
-
-            //check response
-            string finaliseSettleStr = sendToSmartPay(finaliseSettSocket, finaliseSettleXml, "FINALISE");
-            Console.WriteLine($"finalise Return: {finaliseSettleStr}");
-
-
-            finaliseSettleResult = CheckResult(finaliseSettleStr);
-
-            if (finaliseSettleResult == "success")
-            {
-                Console.WriteLine("******Transaction Settle  Finalised successfully******\n");
-            }
-            else
-            {
-                Console.WriteLine("****** Transaction Settle not Finalised ******\n");
-            }
-
-            Console.WriteLine("Finalise Socket Open: " + SocketConnected(finaliseSettSocket));
-
         }
 
 
@@ -435,6 +452,7 @@ namespace BarclayCard_Smartpay
             {
                 Console.WriteLine("Unexpected exception : {0}", e.ToString());
             }
+            
 
             return string.Empty;
         }
@@ -472,7 +490,7 @@ namespace BarclayCard_Smartpay
         }
 
 
-        public XDocument Payment(int amount, string transNum)
+        public XDocument Payment(int amount, string transNum, string description )
         {
             XDocument payment = XDocument.Parse(
                                   "<RLSOLVE_MSG version=\"5.0\">" +
@@ -480,13 +498,14 @@ namespace BarclayCard_Smartpay
                                   "<SOURCE_ID>DK01.P001</SOURCE_ID>" +
                                   "<TRANS_NUM>" + transNum +
                                   "</TRANS_NUM>" +
-                                  "</MESSAGE>" +
+                                  "</MESSAGE>" + 
                                   "<POI_MSG type=\"submittal\">" +
                                    "<SUBMIT name=\"submitPayment\">" +
                                     "<TRANSACTION type= \"purchase\" action =\"auth\" source =\"icc\" customer=\"present\">" +
                                     "<AMOUNT currency=\"826\" country=\"826\">" +
                                       "<TOTAL>" + amount + "</TOTAL>" +
                                     "</AMOUNT>" +
+                                    "<DESCRIPTION>" + description + "</DESCRIPTION>" +
                                     "</TRANSACTION>" +
                                    "</SUBMIT>" +
                                   "</POI_MSG>" +
@@ -495,9 +514,9 @@ namespace BarclayCard_Smartpay
             return payment;
         }
 
-        public XDocument PaymentSettle(int amount, string transNum, string reference)
+        public XDocument PaymentSettle(int amount, string transNum, string reference, string description)
         {
-            XDocument payment = XDocument.Parse(
+            XDocument paymentSettle = XDocument.Parse(
                                   "<RLSOLVE_MSG version=\"5.0\">" +
                                   "<MESSAGE>" +
                                   "<TRANS_NUM>" + transNum +
@@ -510,12 +529,13 @@ namespace BarclayCard_Smartpay
                                     "<AMOUNT currency=\"826\" country=\"826\">" +
                                       "<TOTAL>" + amount + "</TOTAL>" +
                                     "</AMOUNT>" +
+                                    "<DESCRIPTION>" + description + "</DESCRIPTION>" +
                                     "</TRANSACTION>" +
                                    "</SUBMIT>" +
                                   "</POI_MSG>" +
                                 "</RLSOLVE_MSG>");
 
-            return payment;
+            return paymentSettle;
         }
 
         public XDocument processTransaction(string transNum)
