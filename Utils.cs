@@ -3,6 +3,12 @@
 
 namespace BarclayCard_Smartpay
 {
+    public enum DiagnosticErrMsg : short
+    {
+        OK = 0,
+        NOTOK = -1
+    }
+
     public class Utils
     {
         /// <summary>
